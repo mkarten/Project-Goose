@@ -21,25 +21,24 @@ func CreateBootSectorFile() {
 		panic(err)
 	}
 	defer instructionsFile.Close()
-	// Check the size of the instructions file
+
+	// Get the size of the instructions file
 	instructionsFileInfo, err := instructionsFile.Stat()
 	if err != nil {
 		panic(err)
 	}
 	instructionsFileSize := instructionsFileInfo.Size()
-	if instructionsFileSize > 510 {
-		panic("Instructions file is too large! Aborting...")
-	}
+
 	// Read the instructions file into the boot sector
 	fmt.Println(instructionsFileSize)
 	instructionsFile.Read(instructions[:instructionsFileSize])
 
-	// Creating the boot sector identifier
-	instructions[510] = 0x55
-	instructions[511] = 0xAA
-
 	// Write the boot sector to the file
 	binFile.Write(instructions[:])
+	// Extend the file to 1.44 MB
+	binFile.Seek(1474560, 0)
+	binFile.Write([]byte{0x00})
+
 	fmt.Println("Boot sector successfully created!")
 }
 
