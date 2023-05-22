@@ -2,16 +2,79 @@
 bits 16
 
 entry:
+    ; load the disk number of the boot drive
+    mov dl,DiskNumber
     ; reset all registers to zero
     mov ax,0
     mov ds,ax
     mov es,ax
     mov ss,ax
-    mov sp,0x7c00
+    mov sp,StackStart
+    mov bp,sp
+
+    ; print the message "Hello, World"
+    mov si, TestMessage
+    call PrintString
+
+
+    ; print the message "Loading CB bootloader..."
+    mov si, StartLoadingCBootloader
+    call PrintString
+
+    ; load the bootloader to 0x7e00
+    call LoadCBootloader
+
+    ; print the message "CB bootloader loaded successfully"
+    mov si, SuccessLoadingCBootloader
+    call PrintString
 
     ; switch to protected mode
     call EnterProtectedMode
 
+PrintString:
+    pusha
+.loop:
+    mov ah, 0x0e
+    mov bh, 0x00
+    mov bl, 0x07
+    mov al, [si]
+    cmp al, 0
+    je .done
+    int 0x10
+    inc si
+    jmp .loop
+.done:
+    popa
+    ret
+
+LoadCBootloader:
+    mov ah, 0x02 ; read sectors from disk
+    mov al, 4 ; read 4 sectors
+    mov ch, 0 ; cylinder 0
+    mov cl, 2 ; sector 2
+    mov dh, 0 ; head 0
+    mov dl, DiskNumber ; boot drive
+    mov bx, CBootloaderEntry ; load to 0x7e00
+    int 0x13 ; BIOS interrupt
+    jc .diskError ; check if error
+    cmp al, 4 ; check if 4 sectors were read
+    jne .sectorError ; if not, print error message
+    ret
+
+.diskError:
+    ; Print the error message
+    mov si, DriveError
+    call PrintString
+    jmp .halt
+
+.sectorError:
+    ; Print the error message
+    mov si, SectorError
+    call PrintString
+    jmp .halt
+
+.halt:
+    jmp .halt
 
 EnterProtectedMode:
     cli ; 1 disable interrupts
@@ -22,15 +85,28 @@ EnterProtectedMode:
     mov eax, cr0
     or al , 1
     mov cr0, eax
-    ; 5 switch to 32-bit code segment
+    ; 5 jump to 32-bit code segment
     jmp dword 0x08:ProtectedModeEntry
 
-ProtectedModeEntry:
-    ; Start of 32-bit protected mode code
 
+ProtectedModeEntry:
+bits 32
+    ; Start of 32-bit protected mode code
+    ; Write ! on video memory
+    ; load first byte of CBootloaderEntry to eax
+    mov eax, [CBootloaderEntry]
+    ; output the value to video memory
+    mov word [0xb8000], ax
+    mov byte [0xb8001], 0x1f ; white on blue
+    ; End of 32-bit protected mode code
+    ; Infinite loop
 .halt:
     jmp .halt
 
+
+bits 16
+halt:
+    jmp halt
 
 EnableA20:
     ; check if A20 line is already enabled
@@ -71,6 +147,7 @@ EnableA20:
     call A20WaitInput
     mov al, KBCEnableKeyboard
     out KBCCommandPort, al
+    ret
 
 A20AlreadyEnabled:
     call A20WaitInput
@@ -95,12 +172,36 @@ LoadGDT:
     lgdt [g_GDTDesc]
     ret
 
+
+; Keyboard controller ports
 KBCDataPort equ 0x64
 KBCCommandPort equ 0x64
 KBCDisableKeyboard equ 0xAD
 KBCEnableKeyboard equ 0xAE
 KBCReadOutputPort equ 0xD0
 KBCWriteOutputPort equ 0xD1
+
+; General purpose variables
+StackStart equ 0x7b00
+CBootloaderEntry equ 0x7e00
+DiskNumber equ 0x80
+ErrorCounterPtr equ 0x7bfe
+
+; Standard messages
+TestMessage:
+    db "Hello, World", 0x0d, 0x0a, 0
+StartLoadingCBootloader:
+    db "Loading C bootloader...", 0x0d, 0x0a, 0
+
+; Success messages
+SuccessLoadingCBootloader:
+    db "C bootloader loaded successfully", 0x0d, 0x0a, 0
+
+; Error messages
+DriveError:
+    db "Error reading drive", 0x0d, 0x0a, 0
+SectorError:
+    db "number of sectors read is not equal to number of sectors requested", 0x0d, 0x0a, 0
 
 g_GDT: 
     ; Null descriptor
