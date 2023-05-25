@@ -12,11 +12,6 @@ entry:
     mov sp,StackStart
     mov bp,sp
 
-    ; print the message "Hello, World"
-    mov si, TestMessage
-    call PrintString
-
-
     ; print the message "Loading CB bootloader..."
     mov si, StartLoadingCBootloader
     call PrintString
@@ -92,15 +87,8 @@ EnterProtectedMode:
 ProtectedModeEntry:
 bits 32
     ; Start of 32-bit protected mode code
-    ; load first byte of CBootloaderEntry to eax
-    mov eax, [CBootloaderEntry+0xDC]
-    ; output the value to video memory
-    mov word [0xb8000], ax
-    mov byte [0xb8001], 0x1f ; white on blue
-    inc eax
-    mov word [0xb8002], ax
-    mov byte [0xb8003], 0x1f ; white on blue
-    call CBootloaderEntry +0xB4
+    ;
+    call CBootloaderEntry +0xDC
     ; End of 32-bit protected mode code
     ; Infinite loop
 .halt:

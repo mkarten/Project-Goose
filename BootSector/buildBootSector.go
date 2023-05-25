@@ -43,8 +43,13 @@ func CreateBootSectorFile() {
 	// Write the boot sector to the file
 	binFile.Write(instructions[:])
 	// Extend the file to 1.44 MB
-	binFile.Seek(1474560, 0)
+	binFile.Seek(1474559, 0)
 	binFile.Write([]byte{0x00})
+	binFileStats, err := binFile.Stat()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(binFileStats.Size())
 
 	fmt.Println("Boot sector successfully created!")
 }
