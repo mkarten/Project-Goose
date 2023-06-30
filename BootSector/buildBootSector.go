@@ -7,7 +7,7 @@ import (
 
 func CreateBootSectorFile() {
 	// Build the boot sector for the operating system and write it to a file
-	binFile, err := os.OpenFile("boot.bin", os.O_CREATE|os.O_RDWR, 0644)
+	binFile, err := os.OpenFile("boot.img", os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		panic(err)
 	}

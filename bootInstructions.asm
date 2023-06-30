@@ -2,15 +2,19 @@
 bits 16
 
 entry:
-    ; load the disk number of the boot drive
-    mov dl,DiskNumber
+
     ; reset all registers to zero
-    mov ax,0
-    mov ds,ax
-    mov es,ax
-    mov ss,ax
-    mov sp,StackStart
-    mov bp,sp
+    cli
+	xor ax, ax
+	mov ds,ax
+	mov es,ax
+	mov fs,ax
+	mov gs,ax
+	mov ss,ax
+	mov sp,0xffff
+	sti
+
+	mov BYTE[BootDrive], dl
 
     ; print the message "Loading CB bootloader..."
     mov si, StartLoadingCBootloader
@@ -18,10 +22,6 @@ entry:
 
     ; load the bootloader to 0x7e00
     call LoadCBootloader
-
-    ; print the message "CB bootloader loaded successfully"
-    mov si, SuccessLoadingCBootloader
-    call PrintString
 
     ; switch to protected mode
     call EnterProtectedMode
@@ -43,16 +43,27 @@ PrintString:
     ret
 
 LoadCBootloader:
+    xor ax, ax
+    mov ds , ax
     mov ah, 0x02 ; read sectors from disk
-    mov al, 4 ; read 4 sectors
+    mov al, 2 ; read 4 sectors
     mov ch, 0 ; cylinder 0
     mov cl, 2 ; sector 2
     mov dh, 0 ; head 0
-    mov dl, DiskNumber ; boot drive
-    mov bx, CBootloaderEntry ; load to 0x7e00
+    mov dl, [BootDrive] ; boot drive
+    mov bx, 0x7e00 ; load to 0x7e00
     int 0x13 ; BIOS interrupt
+    ; print content of AH register
+    pushf
+    push ax
+    mov ah, 0x0e
+    add al, 0x30
+    int 0x10
+    pop ax
+    popf
+    ; check for errors
     jc .diskError ; check if error
-    cmp al, 4 ; check if 4 sectors were read
+    cmp al, 2 ; check if 4 sectors were read
     jne .sectorError ; if not, print error message
     ret
 
@@ -76,19 +87,25 @@ EnterProtectedMode:
     call EnableA20 ; 2 enable A20 line
     call LoadGDT ; 3 load GDT
 
+    mov si, EnterProtectedModeMessage
+    call PrintString
+
     ; 4 switch to protected mode
     mov eax, cr0
     or al , 1
     mov cr0, eax
+    ; load 32-bit code data segment
+    mov ax, 0x10
+    mov ds, ax
     ; 5 jump to 32-bit code segment
-    jmp dword 0x08:ProtectedModeEntry
+    jmp dword 0x08:0x7e00
 
 
 ProtectedModeEntry:
 bits 32
     ; Start of 32-bit protected mode code
     ;
-    call CBootloaderEntry +0xDC
+    call CBootloaderEntry
     ; End of 32-bit protected mode code
     ; Infinite loop
 .halt:
@@ -100,67 +117,50 @@ halt:
     jmp halt
 
 EnableA20:
-    ; check if A20 line is already enabled
-    call A20WaitInput
-    mov al, KBCReadOutputPort
-    out KBCCommandPort, al
+    mov     ax,2403h                ;--- A20-Gate Support ---
+    int     15h
+    jb      a20_ns                  ;INT 15h is not supported
+    cmp     ah,0
+    jnz     a20_ns                  ;INT 15h is not supported
 
-    call A20WaitOutput
-    in al, KBCDataPort
-    test al, 0x02 ; check bit 2
-    jnz A20AlreadyEnabled
+    mov     ax,2402h                ;--- A20-Gate Status ---
+    int     15h
+    jb      a20_failed              ;couldn't get status
+    cmp     ah,0
+    jnz     a20_failed              ;couldn't get status
 
-    ; disable keyboard
-    call A20WaitInput
-    mov al, KBCDisableKeyboard
-    out KBCCommandPort, al
+    cmp     al,1
+    jz      a20_activated           ;A20 is already activated
 
-    ; read output port
-    call A20WaitInput
-    mov al, KBCReadOutputPort
-    out KBCCommandPort, al
+    mov     ax,2401h                ;--- A20-Gate Activate ---
+    int     15h
+    jb      a20_failed              ;couldn't activate the gate
+    cmp     ah,0
+    jnz     a20_failed              ;couldn't activate the gate
 
-    call A20WaitOutput
-    in al, KBCDataPort
-    push eax
-
-    ; set bit 2 (A20 line) to 1
-    call A20WaitInput
-    mov al, KBCWriteOutputPort
-    out KBCCommandPort, al
-
-    call A20WaitInput
-    pop eax
-    or al, 0x02 ; set bit 2 to 1
-    out KBCDataPort, al
-
-    ; enable keyboard
-    call A20WaitInput
-    mov al, KBCEnableKeyboard
-    out KBCCommandPort, al
+    a20_activated:                  ;go on
+    mov si, A20ActivatedMessage
+    call PrintString
     ret
 
-A20AlreadyEnabled:
-    call A20WaitInput
-    ret
+    a20_ns:
+    mov si, Int15hNotSupportedMessage
+    call PrintString
+    .halt:
+    jmp .halt
 
-A20WaitInput:
-    ; wait until status bit 2 is 0
-    in al, KBCCommandPort
-    test al, 0x02
-    jnz A20WaitInput
-    ret
-
-A20WaitOutput:
-    ; wait until status but 1 is 1 in order to be read
-    in al, KBCCommandPort
-    test al, 0x01
-    jz A20WaitOutput
-    ret
+    a20_failed:
+    mov si, A20FailedMessage
+    call PrintString
+    .halt:
+    jmp .halt
 
 LoadGDT:
     ; load GDT
     lgdt [g_GDTDesc]
+    ; print the message "Loaded GDT"
+    mov si, LoadGDTMessage
+    call PrintString
     ret
 
 
@@ -175,24 +175,36 @@ KBCWriteOutputPort equ 0xD1
 ; General purpose variables
 StackStart equ 0x7b00
 CBootloaderEntry equ 0x7e00
-DiskNumber equ 0x80
+BootDrive:
+    db 0
 ErrorCounterPtr equ 0x7bfe
 
 ; Standard messages
-TestMessage:
-    db "Hello, World", 0x0d, 0x0a, 0
 StartLoadingCBootloader:
     db "Loading C bootloader...", 0x0d, 0x0a, 0
 
+LoadGDTMessage:
+    db "Loaded GDT", 0x0d, 0x0a, 0
+
+EnterProtectedModeMessage:
+    db "Entering protected mode...", 0x0d, 0x0a, 0
+
+Int15hNotSupportedMessage:
+    db "INT 15h is not supported", 0x0d, 0x0a, 0
+
+A20ActivatedMessage:
+    db "A20 is activated", 0x0d, 0x0a, 0
+
+A20FailedMessage:
+    db "Couldn't activate A20", 0x0d, 0x0a, 0
+
 ; Success messages
-SuccessLoadingCBootloader:
-    db "C bootloader loaded successfully", 0x0d, 0x0a, 0
 
 ; Error messages
 DriveError:
     db "Error reading drive", 0x0d, 0x0a, 0
 SectorError:
-    db "number of sectors read is not equal to number of sectors requested", 0x0d, 0x0a, 0
+    db "read is not = to sectors requested", 0x0d, 0x0a, 0
 
 g_GDT: 
     ; Null descriptor
