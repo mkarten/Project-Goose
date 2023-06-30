@@ -46,7 +46,7 @@ LoadCBootloader:
     xor ax, ax
     mov ds , ax
     mov ah, 0x02 ; read sectors from disk
-    mov al, 2 ; read 4 sectors
+    mov al, 4 ; read 4 sectors
     mov ch, 0 ; cylinder 0
     mov cl, 2 ; sector 2
     mov dh, 0 ; head 0
@@ -63,7 +63,7 @@ LoadCBootloader:
     popf
     ; check for errors
     jc .diskError ; check if error
-    cmp al, 2 ; check if 4 sectors were read
+    cmp al, 4 ; check if 4 sectors were read
     jne .sectorError ; if not, print error message
     ret
 
@@ -98,8 +98,9 @@ EnterProtectedMode:
     mov ax, 0x10
     mov ds, ax
     ; 5 jump to 32-bit code segment
-    jmp dword 0x08:0x7e00
-
+    call dword 0x08:0x7e00
+.halt:
+    jmp .halt
 
 ProtectedModeEntry:
 bits 32
