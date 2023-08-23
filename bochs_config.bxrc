@@ -1,6 +1,6 @@
 megs: 128
-romimage: file="C:\Users\Mkarten\Downloads\BIOS-bochs-latest"
-vgaromimage: file="C:\Users\Mkarten\Downloads\VGABIOS-elpin-2.40"
+romimage: file="Bochs-Config-Files/BIOS-bochs-latest"
+vgaromimage: file="Bochs-Config-Files/VGABIOS-elpin-2.40"
 floppya: 1_44=boot.img, status=inserted
 boot: floppy
 mouse: enabled=0
