@@ -1,6 +1,6 @@
 typedef void (*putc_t)(unsigned char c);
 typedef void (*clear_t)(uint8_t color);
-typedef void (*wait_t)(uint32_t time);
+typedef void (*sleep_t)(uint32_t time);
 typedef void (*puts_t)(unsigned char str[]);
 typedef void (*puti_t)(int32_t num);
 
@@ -16,7 +16,7 @@ struct Kernel{
 
     putc_t putc;
     clear_t clear;
-    wait_t wait;
+    sleep_t sleep;
     puts_t puts;
     puti_t puti;
 };

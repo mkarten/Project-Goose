@@ -46,7 +46,7 @@ LoadCBootloader:
     xor ax, ax
     mov ds , ax
     mov ah, 0x02 ; read sectors from disk
-    mov al, 4 ; read 4 sectors
+    mov al, 20 ; read 20 sectors
     mov ch, 0 ; cylinder 0
     mov cl, 2 ; sector 2
     mov dh, 0 ; head 0
@@ -63,7 +63,7 @@ LoadCBootloader:
     popf
     ; check for errors
     jc .diskError ; check if error
-    cmp al, 4 ; check if 4 sectors were read
+    cmp al, 20 ; check if 4 sectors were read
     jne .sectorError ; if not, print error message
     ret
 

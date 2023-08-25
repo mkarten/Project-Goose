@@ -18,6 +18,21 @@ void outportb(unsigned int port,unsigned char value)
     __asm__ __volatile__("outb %%al,%%dx"::"a"(value),"d"(port));
 }
 
+void enable_bliking_text()
+{
+    inportb(0x3DA);
+    outportb(0x3C0,0x30);
+    outportb(0x3C0, inportb(0x3C1) | 0x08);
+}
+
+void disable_bliking_text()
+{
+    inportb(0x3DA);
+    outportb(0x3C0,0x30);
+    outportb(0x3C0, inportb(0x3C1) & 0xF7);
+}
+
+
 void enable_cursor(uint8_t cursor_start, uint8_t cursor_end)
 {
     outportb(0x3D4, 0x0A);
@@ -41,16 +56,21 @@ void move_cursor(uint16_t x, uint16_t y)
     outportb(0x3D4, 0x0E);
     outportb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
 }
-
-void wait(uint32_t time) {
-    for (int i = 0; i < time; i++) {
-        __asm__("nop");
+// sleep for time milliseconds
+void sleep(uint32_t time) {
+    for (uint32_t i = 0; i < time; i++) {
+        __asm__ __volatile__("nop");
     }
+}
+
+void put(unsigned char c,uint8_t forecolor,uint8_t backcolor,uint16_t x,uint16_t y) {
+    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    uint16_t *video_memory = (uint16_t *)0xb8000;
+    video_memory[x + y * kernel->ScreenWidth] = (backcolor << 12) | (forecolor << 8) | c;
 }
 
 void putc(unsigned char c) {
     struct Kernel *kernel = (struct Kernel *)0x00000000;
-    uint16_t *video_memory = (uint16_t *)0xb8000;
     // check if c is a control character
     if (c == '\n') {
         kernel->ScreenPosX = 0;
@@ -64,9 +84,9 @@ void putc(unsigned char c) {
             kernel->ScreenPosY--;
             kernel->ScreenPosX = kernel->ScreenWidth - 1;
         }
-        video_memory[kernel->ScreenPosX + kernel->ScreenPosY * kernel->ScreenWidth] = (kernel->BackgroundColor << 12) | (kernel->ForegroundColor << 8) | ' ';
+        put(' ', kernel->ForegroundColor, kernel->BackgroundColor, kernel->ScreenPosX, kernel->ScreenPosY);
     } else {
-        video_memory[kernel->ScreenPosX + kernel->ScreenPosY * kernel->ScreenWidth] = (kernel->BackgroundColor << 12) | (kernel->ForegroundColor << 8) | c;
+        put(c, kernel->ForegroundColor, kernel->BackgroundColor, kernel->ScreenPosX, kernel->ScreenPosY);
         kernel->ScreenPosX++;
     }
     if (kernel->ScreenPosX >= kernel->ScreenWidth) {
@@ -76,7 +96,7 @@ void putc(unsigned char c) {
             // scroll screen one line up
             for (uint16_t y = 0; y < kernel->ScreenHeight - 1; y++) {
                 for (uint16_t x = 0; x < kernel->ScreenWidth; x++) {
-                    video_memory[x + y * kernel->ScreenWidth] = video_memory[x + (y + 1) * kernel->ScreenWidth];
+                    put(' ', kernel->ForegroundColor, kernel->BackgroundColor, x, y);
                 }
             }
 
@@ -143,9 +163,12 @@ void init() {
     // initialize kernel functions
     kernel->putc = putc+0x7e00;
     kernel->clear = clear+0x7e00;
-    kernel->wait = wait+0x7e00;
+    kernel->sleep = sleep+0x7e00;
     kernel->puts = puts+0x7e00;
     kernel->puti = puti+0x7e00;
+
+    // initialize vga module
+
 }
 
 unsigned int restart_keyboard()
@@ -173,31 +196,69 @@ void _cdecl c_kernel_() {
     {
         0,0,'1','2','3','4','5','6','7','8','9','0','-','=','\b','\t','q','w','e','r','t','y','u','i','o','p','[',']','\n',        0,'a','s','d','f','g','h','j','k','l',';','\'','`',0,'\\','z','x','c','v','b','n','m',',','.','/',0,'*',0,' ',
     };
+    // the intro screen is 18 lines high and 12 columns wide
+    unsigned char introScreen[19][12] = {
+            {0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0x00, 0x0F, 0x0F, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0x00, 0x66, 0x0F, 0x00, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0x00, 0x66, 0x66, 0x0F, 0x00, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0x00, 0x00, 0x0F, 0x0F, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0xFF, 0x00, 0x0F, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0xFF, 0x00, 0x0F, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0xFF, 0x00, 0x0F, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0x00, 0x0F, 0x0F, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0x00, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0x00,},
+            {0xFF, 0x00, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x00, 0x00, 0x00, 0x00,},
+            {0xFF, 0x00, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x00,},
+            {0xFF, 0x00, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x00, 0xFF,},
+            {0xFF, 0xFF, 0x00, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x00, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0xFF, 0x00, 0x0F, 0x0F, 0x0F, 0x0F, 0x00, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0xFF, 0xFF, 0x66, 0xFF, 0xFF, 0x66, 0xFF, 0xFF, 0xFF, 0xFF,},
+            {0xFF, 0xFF, 0xFF, 0x66, 0x66, 0xFF, 0x66, 0x66, 0xFF, 0xFF, 0xFF, 0xFF}
+    };
     struct Kernel *kernel = (struct Kernel *)0x00000000;
-    // test kernel functions
-    uint8_t  color = Black;
-//    while (1==1) {
-//        kernel->clear(color);
-//        color++;
-//        if (color > 0x0F) {
-//            color = 0x00;
-//        }
-//    }
     kernel->clear(Black);
-    enable_cursor(15, 15);
-    unsigned char str[] = "Hello, World!\n";
-    kernel->puts(str);
-    restart_keyboard();
-    while(1==1){
-        unsigned char scancode = get_scancode();
-        // check if scancode is a key release
-        if(scancode & 0x80){
-            // do nothing
-        }else{
-            // print value of scancode
-            kernel->putc(Klayout[scancode]);
+    unsigned char start[] = "Press any key to start kernel execution...";
+    // center text on screen
+    kernel->ScreenPosY = 12;
+    kernel->ScreenPosX = (kernel->ScreenWidth - sizeof(start)) / 2;
+    kernel->puts(start);
+    unsigned char temp = get_scancode();
+    unsigned char back_color = 0x07;
+    kernel->clear(back_color);
+    kernel->BackgroundColor = back_color;
+    kernel->ForegroundColor = Black;
+    disable_cursor();
+    // display intro screen
+    unsigned char Project[] = "PROJECT GOOSE";
+    // disable blinking to have the full 16 background colors
+    disable_bliking_text();
+    // center the intro screen
+    int xOff = (kernel->ScreenWidth - 24) / 2;
+    int yOff = (kernel->ScreenHeight - 18) / 2;
+    for (uint8_t y = 0; y < 18; y++) {
+        for (uint8_t x = 0; x < 24; x++) {
+            if (introScreen[y][x / 2] == 0xFF) {
+                put(' ', kernel->ForegroundColor, kernel->BackgroundColor, x + xOff, y + yOff);
+            }else{
+                if (x % 2 == 0) {
+                put(' ', introScreen[y][x / 2] | 0x00, introScreen[y][x / 2] | 0x00, x + xOff, y + yOff);
+                } else {
+                    put(' ', introScreen[y][x / 2] | 0x00, introScreen[y][x / 2] | 0x00, x + xOff, y + yOff);
+                }
+            }
+            sleep(10000);
         }
-     }
+    }
+    // display project goose centered under intro screen
+    kernel->ScreenPosY = yOff + 19;
+    kernel->ScreenPosX = (kernel->ScreenWidth - sizeof(Project)) / 2;
+    kernel->puts(Project);
+    // enable blinking text again
+    // enable_bliking_text();
+    // enable_cursor(15, 15);
+    // move_cursor(79, 24);
 }
 
 
