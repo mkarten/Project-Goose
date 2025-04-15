@@ -3,6 +3,7 @@ package BootSector
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 func CreateBootSectorFile() {
@@ -18,28 +19,39 @@ func CreateBootSectorFile() {
 	}
 	defer kernelFile.Close()
 	fmt.Println("Initializing boot sector...")
-	instructions := make([]byte, 5000)
+	instructions := make([]byte, 100000)
 
 	// TODO: Add assembly instruction to use during boot
 	// Open the instructions binary file
-	instructionsFile, err := os.OpenFile("instructions.bin", os.O_RDONLY, 0644)
+	var bootloaderStages []*os.File
+	// read all the .bin files in the bootloaderStages directory
+	bootloaderStagesDir, err := os.ReadDir("bootloaderStages")
 	if err != nil {
 		panic(err)
 	}
-	defer instructionsFile.Close()
-
-	// Get the size of the instructions file
-	instructionsFileInfo, err := instructionsFile.Stat()
-	if err != nil {
-		panic(err)
+	for _, file := range bootloaderStagesDir {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".bin") {
+			continue
+		}
+		fmt.Println("Reading bootloader stage: ", file.Name())
+		bootloaderStage, err := os.OpenFile("bootloaderStages/"+file.Name(), os.O_RDONLY, 0644)
+		if err != nil {
+			panic(err)
+		}
+		bootloaderStages = append(bootloaderStages, bootloaderStage)
 	}
-	instructionsFileSize := instructionsFileInfo.Size()
 
-	// Read the instructions file into the boot sector
-	fmt.Println(instructionsFileSize)
-	instructionsFile.Read(instructions[:instructionsFileSize])
+	for _, stage := range bootloaderStages {
+		stageStats, err := stage.Stat()
+		if err != nil {
+			panic(err)
+		}
+		stageSize := stageStats.Size()
+		stage.Read(instructions[:stageSize])
+		binFile.Write(instructions[:stageSize])
+	}
 	// Read the kernel file into the boot sector
-	kernelFile.Read(instructions[512:])
+	kernelFile.Read(instructions[:])
 	// Write the boot sector to the file
 	binFile.Write(instructions[:])
 	// Extend the file to 1.44 MB

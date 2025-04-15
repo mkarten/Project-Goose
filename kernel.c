@@ -1,9 +1,21 @@
 #include "stdint.h"
+#include "stdbool.h"
 #include "kernelStruct.h"
 #include "colors.h"
 
-void _cdecl c_entry_(){
-    c_kernel_();
+void __cdecl c_entry_() {
+    __asm__ __volatile__("mov $0x10, %ax\n\t"
+                         "mov %ax, %ds\n\t"
+                         "mov %ax, %es\n\t"
+                         "mov %ax, %fs\n\t"
+                         "mov %ax, %gs\n\t"
+                         "mov %ax, %ss\n\t"
+                         "mov $0x90000, %ebp\n\t"
+                         "mov $0x50000, %esp\n\t");
+    k_init();
+    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    kernel->clear(Black);
+    k_entrypoint();
 }
 
 int inportb(unsigned int port)
@@ -147,7 +159,7 @@ void puti(int32_t num) {
     }
 }
 
-void init() {
+void k_init() {
     // store static kernel struct in memory at 0x00000000
     struct Kernel *kernel = (struct Kernel *)0x00000000;
 
@@ -161,11 +173,11 @@ void init() {
 
 
     // initialize kernel functions
-    kernel->putc = putc+0x7e00;
-    kernel->clear = clear+0x7e00;
-    kernel->sleep = sleep+0x7e00;
-    kernel->puts = puts+0x7e00;
-    kernel->puti = puti+0x7e00;
+    kernel->putc = putc+0xA000;
+    kernel->clear = clear+0xA000;
+    kernel->sleep = sleep+0xA000;
+    kernel->puts = puts+0xA000;
+    kernel->puti = puti+0xA000;
 
     // initialize vga module
 
@@ -190,8 +202,7 @@ unsigned char get_scancode()
     return inputdata;
 }
 
-void _cdecl c_kernel_() {
-    init();
+void k_entrypoint() {
     unsigned char Klayout[128] =
     {
         0,0,'1','2','3','4','5','6','7','8','9','0','-','=','\b','\t','q','w','e','r','t','y','u','i','o','p','[',']','\n',        0,'a','s','d','f','g','h','j','k','l',';','\'','`',0,'\\','z','x','c','v','b','n','m',',','.','/',0,'*',0,' ',
@@ -219,6 +230,7 @@ void _cdecl c_kernel_() {
     };
     struct Kernel *kernel = (struct Kernel *)0x00000000;
     kernel->clear(Black);
+
     unsigned char start[] = "Press any key to start kernel execution...";
     // center text on screen
     kernel->ScreenPosY = 12;
@@ -230,15 +242,20 @@ void _cdecl c_kernel_() {
     kernel->BackgroundColor = back_color;
     kernel->ForegroundColor = Black;
     disable_cursor();
+
     // display intro screen
     unsigned char Project[] = "PROJECT GOOSE";
     // disable blinking to have the full 16 background colors
     disable_bliking_text();
     // center the intro screen
+
     int xOff = (kernel->ScreenWidth - 24) / 2;
     int yOff = (kernel->ScreenHeight - 18) / 2;
+    //__asm__ __volatile__("hlt");
     for (uint8_t y = 0; y < 18; y++) {
+
         for (uint8_t x = 0; x < 24; x++) {
+
             if (introScreen[y][x / 2] == 0xFF) {
                 put(' ', kernel->ForegroundColor, kernel->BackgroundColor, x + xOff, y + yOff);
             }else{
@@ -248,7 +265,6 @@ void _cdecl c_kernel_() {
                     put(' ', introScreen[y][x / 2] | 0x00, introScreen[y][x / 2] | 0x00, x + xOff, y + yOff);
                 }
             }
-            sleep(10000);
         }
     }
     // display project goose centered under intro screen
@@ -259,6 +275,35 @@ void _cdecl c_kernel_() {
     // enable_bliking_text();
     // enable_cursor(15, 15);
     // move_cursor(79, 24);
+
+    // restart the keyboard
+    restart_keyboard();
+    // move the cursor to the top left corner
+    move_cursor(0, 0);
+    // enable the cursor
+    enable_bliking_text();
+
+    // go back to the top left corner
+    kernel->ScreenPosX = 0;
+    kernel->ScreenPosY = 0;
+    // print the available memory located at 0x500
+    unsigned char mem[] = "Available memory: \n";
+    unsigned char Con[] = "Conventional Memory: ";
+    unsigned char Ext[] = "Extended Memory: ";
+    unsigned char Kbytes[] = " KB\n";
+    kernel->puts(mem);
+    kernel->puts(Con);
+    kernel->puti(*(int32_t *)0x500);
+    kernel->puts(Kbytes);
+    kernel->puts(Ext);
+    kernel->puti(*(int32_t *)0x504);
+    kernel->puts(Kbytes);
+
+    while (true){
+        unsigned char temp = get_scancode();
+        // print the scancode to the screen
+        kernel->putc(Klayout[temp]);
+    }
 }
 
 
