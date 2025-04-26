@@ -2,6 +2,9 @@
 #include "stdbool.h"
 #include "kernelStruct.h"
 #include "colors.h"
+#include "memory.h"
+#include "keyboard.h"  // Added missing include
+#include "descriptors.h"
 
 void __cdecl c_entry_() {
     __asm__ __volatile__("mov $0x10, %ax\n\t"
@@ -105,7 +108,7 @@ void putc(unsigned char c) {
         kernel->ScreenPosX = 0;
         kernel->ScreenPosY++;
     }
-    
+
     // Handle scrolling if we've reached the bottom of the screen
     if (kernel->ScreenPosY >= kernel->ScreenHeight) {
         // Scroll the screen up by one line
@@ -116,16 +119,16 @@ void putc(unsigned char c) {
                 video_memory[y * kernel->ScreenWidth + x] = video_memory[(y + 1) * kernel->ScreenWidth + x];
             }
         }
-        
+
         // Clear the last line
         for (uint16_t x = 0; x < kernel->ScreenWidth; x++) {
             put(' ', kernel->ForegroundColor, kernel->BackgroundColor, x, kernel->ScreenHeight - 1);
         }
-        
+
         // Reset cursor position to the beginning of the last line
         kernel->ScreenPosY = kernel->ScreenHeight - 1;
     }
-    
+
     move_cursor(kernel->ScreenPosX, kernel->ScreenPosY);
 }
 
@@ -183,6 +186,17 @@ void k_init() {
     kernel->ForegroundColor = 0x07;
     kernel->BackgroundColor = 0x00;
 
+    // initialize memory manager
+    mem_init();
+
+    // Initialize GDT
+    gdt_init();
+
+    // Initialize IDT structures (but don't set up interrupts yet)
+    idt_init();
+
+    // initialize keyboard system
+    keyboard_init();
 
     // initialize kernel functions
     kernel->putc = putc+0xA000;
@@ -293,27 +307,25 @@ void k_entrypoint() {
     enable_bliking_text();    // go back to the top left corner
     kernel->ScreenPosX = 0;
     kernel->ScreenPosY = 0;
-    // print the available memory located at 0x500
+    // print the available memory
     unsigned char memMapTitle[] = "Memory Map (INT 0x15, EAX=0xE820):\n";
     unsigned char entryCount[] = "Entries found: ";
     unsigned char baseAddrStr[] = "Base Address: 0x";
     unsigned char lengthStr[] = "Length: 0x";
     unsigned char typeStr[] = "Type: ";
-    unsigned char typeNames[6][20] = {
-        "Unknown",
-        "Usable RAM",
-        "Reserved",
-        "ACPI Reclaimable",
-        "ACPI NVS",
-        "Bad Memory"
-    };
+    unsigned char typeUnknown[] = "Unknown";
+    unsigned char typeUsable[] = "Usable RAM";
+    unsigned char typeReserved[] = "Reserved";
+    unsigned char typeACPIReclaimable[] = "ACPI Reclaimable";
+    unsigned char typeACPINVS[] = "ACPI NVS";
+    unsigned char typeBadMemory[] = "Bad Memory";
     unsigned char separator[] = "-------------------------\n";
-    unsigned char Kbytes[] = " KB\n";
+    unsigned char Kbytes[] = " KB";
     unsigned char bytes[] = " bytes\n";
-    
+
     // Get entry count from 0x8A00 (as you mentioned in your comment)
     uint16_t entries = *(uint16_t *)0x8A00;
-    
+
     kernel->puts(memMapTitle);
     kernel->puts(entryCount);
     kernel->puti(entries);
@@ -329,10 +341,10 @@ void k_entrypoint() {
         uint32_t type;           // Region type
         uint32_t acpiExt;        // ACPI 3.0 Extended Attributes
     } __attribute__((packed)) MemMapEntry;
-    
+
     // Entry array starts at 0x8A04 (as per your comment)
     MemMapEntry* memMap = (MemMapEntry*)0x8A04;
-    
+
     uint32_t totalUsableLow = 0;
     uint32_t totalUsableHigh = 0;
       // Process each entry
@@ -341,17 +353,17 @@ void k_entrypoint() {
         if (memMap[i].lengthLow == 0 && memMap[i].lengthHigh == 0) {
             continue;
         }
-        
+
         // Print entry details
         kernel->puts(baseAddrStr);
-        
+
         // Display the base address (as two 32-bit values)
         if (memMap[i].baseAddrHigh > 0) {
             kernel->puti(memMap[i].baseAddrHigh);
         }
         kernel->puti(memMap[i].baseAddrLow);
         kernel->putc('\n');
-        
+
         // Display length
         kernel->puts(lengthStr);
         if (memMap[i].lengthHigh > 0) {
@@ -359,7 +371,7 @@ void k_entrypoint() {
         }
         kernel->puti(memMap[i].lengthLow);
         kernel->putc('\n');
-        
+
         // Convert length to KB for display - handling potential overflow
         uint32_t lengthKB;
         if (memMap[i].lengthHigh > 0) {
@@ -372,16 +384,28 @@ void k_entrypoint() {
         kernel->putc('(');
         kernel->puti(lengthKB);
         kernel->puts(Kbytes);
+        kernel->putc(')');
+        kernel->putc('\n');
           // Display memory type
         kernel->puts(typeStr);
         // Make sure we're using a valid index (type 0 is "Unknown")
         if (memMap[i].type >= 1 && memMap[i].type <= 5) {
-            kernel->puts(typeNames[memMap[i].type]);
+            if (memMap[i].type == 1) {
+                kernel->puts(typeUsable);
+            } else if (memMap[i].type == 2) {
+                kernel->puts(typeReserved);
+            } else if (memMap[i].type == 3) {
+                kernel->puts(typeACPIReclaimable);
+            } else if (memMap[i].type == 4) {
+                kernel->puts(typeACPINVS);
+            } else if (memMap[i].type == 5) {
+                kernel->puts(typeBadMemory);
+            }
         } else {
-            kernel->puts(typeNames[0]); // Unknown type
+            kernel->puts(typeUnknown);
         }
         kernel->putc('\n');
-        
+
         // Keep track of total usable memory
         if (memMap[i].type == 1) { // Type 1 is usable RAM
             // Add the current region to the total, handling potential overflow
@@ -392,21 +416,21 @@ void k_entrypoint() {
             totalUsableLow = newTotalLow;
             totalUsableHigh += memMap[i].lengthHigh;
         }
-        
+
         kernel->puts(separator);
     }
       // Display total usable memory
     unsigned char totalStr[] = "Total Usable Memory: ";
     kernel->puts(totalStr);
-    
+
     // Convert to KB for display - handling potential overflow
     uint32_t totalKBLow = totalUsableLow / 1024;
     uint32_t overflowBytes = totalUsableLow % 1024;
     uint32_t totalKBHigh = totalUsableHigh * 4194304; // 4194304 = 2^32 / 1024
-    
+
     // Add in any overflow bytes from the low part
     totalKBHigh += overflowBytes / 1024;
-    
+
     // Display the result
     if (totalKBHigh > 0) {
         kernel->puti(totalKBHigh);
@@ -414,10 +438,27 @@ void k_entrypoint() {
     }
     kernel->puti(totalKBLow);
     kernel->puts(Kbytes);
-    while (true){
-        unsigned char temp = get_scancode();
-        // print the scancode to the screen
-        kernel->putc(Klayout[temp]);
+
+    // After displaying the memory map, also show heap information
+    print_memory_map();
+
+
+    // Main loop in k_entrypoint()
+    unsigned char message[] = "Press Ctrl+L to switch keyboard layout, ESC to exit.";
+    while (true) {
+        keyboard_update();  // Update keyboard state
+        // Check for key presses
+//        if (keyboard_is_key_pressed(KEY_ESCAPE)) {
+//            break;  // Exit the loop if ESC is pressed
+//        }
+//        if (keyboard_is_key_pressed(KEY_LCTRL)) {
+//            // Switch keyboard layout
+//            // Here you would implement the logic to switch the keyboard layout
+//            // For example, you could toggle between different layouts
+//            // This is just a placeholder for demonstration
+//        }
+        // halt the CPU to save power
+        sleep(10000);
     }
 }
 
