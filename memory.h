@@ -58,4 +58,7 @@ void mem_stats(uint32_t* total, uint32_t* used, uint32_t* free);
 // Print memory map information
 void print_memory_map();
 
+// Print memory stats
+void print_memory_stats();
+
 #endif // MEMORY_H

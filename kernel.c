@@ -442,21 +442,22 @@ void k_entrypoint() {
     // After displaying the memory map, also show heap information
     print_memory_map();
 
+    // Print memory stats
+    print_memory_stats();
 
     // Main loop in k_entrypoint()
     unsigned char message[] = "Press Ctrl+L to switch keyboard layout, ESC to exit.";
     while (true) {
-        keyboard_update();  // Update keyboard state
         // Check for key presses
-//        if (keyboard_is_key_pressed(KEY_ESCAPE)) {
-//            break;  // Exit the loop if ESC is pressed
-//        }
-//        if (keyboard_is_key_pressed(KEY_LCTRL)) {
-//            // Switch keyboard layout
-//            // Here you would implement the logic to switch the keyboard layout
-//            // For example, you could toggle between different layouts
-//            // This is just a placeholder for demonstration
-//        }
+        if (keyboard_is_key_pressed(KEY_ESCAPE)) {
+            break;  // Exit the loop if ESC is pressed
+        }
+        if (keyboard_is_key_pressed(KEY_LCTRL)) {
+            // Switch keyboard layout
+            // Here you would implement the logic to switch the keyboard layout
+            // For example, you could toggle between different layouts
+            // This is just a placeholder for demonstration
+        }
         // halt the CPU to save power
         sleep(10000);
     }
