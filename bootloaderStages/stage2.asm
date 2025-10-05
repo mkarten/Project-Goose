@@ -84,7 +84,7 @@ LoadKernel:
 
     ; Load Kernel into memory
     mov ah, 0x02          ; BIOS Read Sector function
-    mov al, 40             ; Read 8 sectors (matching kernel size)
+    mov al, 22             ; Read 8 sectors (matching kernel size)
     mov ch, 0             ; Cylinder 0
     mov dh, 0             ; Head 0
     mov cl, 18            ; Sector 11

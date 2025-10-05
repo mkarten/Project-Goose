@@ -1,6 +1,6 @@
-#include "keyboard.h"
-#include "kernelStruct.h"
-#include "memory.h"
+#include "../includes/keyboard.h"
+#include "../includes/kernelStruct.h"
+#include "../includes/memory.h"
 
 KeyboardState* kb_state;
 
@@ -29,19 +29,19 @@ static unsigned char layout_fr[] = {
 
 static unsigned char layout_fr_shift[] = {
     0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'o', '+', '\b',
-    '\t', 'A', 'Z', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '"', '£', '\n',
+    '\t', 'A', 'Z', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '"', ' ', '\n',
     0, 'Q', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'M', '%', '~',
-    0, 'µ', 'W', 'X', 'C', 'V', 'B', 'N', '?', '.', '/', '§', 0, '*', 0, ' '
+    0, ' ', 'W', 'X', 'C', 'V', 'B', 'N', '?', '.', '/', ' ', 0, '*', 0, ' '
 };
 
 static unsigned char layout_fr_altgr[] = {
     0, 0, 0, '~', '#', '{', '[', '|', '`', '\\', '^', '@', ']', '}', '\b',
-    '\t', 0, 0, '€', 0, 0, 0, 0, 0, 0, 0, 0, '¤', '\n',
+    '\t', 0, 0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, ' ', '\n',
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '*', 0, ' '
 };
 
-static uint8_t last_scancode = 0;
+uint8_t last_scancode = 0;
 static char last_char = 0;  // Add this variable to store the last character
 
 void keyboard_init() {

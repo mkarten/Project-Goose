@@ -12,11 +12,10 @@ struct Kernel{
     uint32_t ScreenPosY;
     uint8_t  ForegroundColor;
     uint8_t  BackgroundColor;
-    char     KeyboardLayout[128];
-
     putc_t putc;
     clear_t clear;
     sleep_t sleep;
     puts_t puts;
     puti_t puti;
+    char     KeyboardLayout[128];
 };

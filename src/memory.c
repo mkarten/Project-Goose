@@ -1,5 +1,6 @@
-#include "memory.h"
-#include "kernelStruct.h"
+#include "../includes/memory.h"
+#include "../includes/kernelStruct.h"
+#include "../includes/stddef.h"
 
 #define HEAP_START 0x100000    // Start heap at 500KB
 #define MAGIC_NUMBER 0xDEADBEEF // For memory corruption detection
@@ -132,7 +133,7 @@ void mem_stats(uint32_t* total, uint32_t* used, uint32_t* free) {
 }
 
 void print_memory_map() {
-    struct Kernel* kernel = (struct Kernel*)0x00000000;
+    struct Kernel* kernel = (struct Kernel*)0x7d00;
     uint16_t entries = *(uint16_t*)0x8A00;
     MemoryMapEntry* memMap = (MemoryMapEntry*)0x8A04;
     
@@ -165,7 +166,7 @@ void print_memory_stats() {
     uint32_t total, used, free;
     mem_stats(&total, &used, &free);
 
-    struct Kernel* kernel = (struct Kernel*)0x00000000;
+    struct Kernel* kernel = (struct Kernel*)0x7d00;
     kernel->puts("Memory Stats:\n");
     kernel->puts("Total Memory: ");
     kernel->puti(total);

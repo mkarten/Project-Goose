@@ -1,5 +1,5 @@
-#include "descriptors.h"
-#include "memory.h"
+#include "../includes/descriptors.h"
+#include "../includes/memory.h"
 #include "io.h"
 
 // GDT entries and pointer

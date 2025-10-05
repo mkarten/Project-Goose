@@ -1,37 +1,12 @@
-#include "stdint.h"
-#include "stdbool.h"
-#include "kernelStruct.h"
-#include "colors.h"
-#include "memory.h"
-#include "keyboard.h"  // Added missing include
-#include "descriptors.h"
-
-void __cdecl c_entry_() {
-    __asm__ __volatile__("mov $0x10, %ax\n\t"
-                         "mov %ax, %ds\n\t"
-                         "mov %ax, %es\n\t"
-                         "mov %ax, %fs\n\t"
-                         "mov %ax, %gs\n\t"
-                         "mov %ax, %ss\n\t"
-                         "mov $0x90000, %ebp\n\t"
-                         "mov $0x50000, %esp\n\t");
-    k_init();
-    struct Kernel *kernel = (struct Kernel *)0x00000000;
-    kernel->clear(Black);
-    k_entrypoint();
-}
-
-int inportb(unsigned int port)
-{
-    int ret;
-    __asm__ __volatile__("inb %%dx,%%al":"=a"(ret):"d"(port));
-    return ret;
-}
-
-void outportb(unsigned int port,unsigned char value)
-{
-    __asm__ __volatile__("outb %%al,%%dx"::"a"(value),"d"(port));
-}
+#include "../includes/stdint.h"
+#include "../includes/stdbool.h"
+#include "../includes/kernelStruct.h"
+#include "../includes/colors.h"
+#include "../includes/memory.h"
+#include "../includes/keyboard.h"
+#include "../includes/descriptors.h"
+#include "../includes/io.h"
+#include "../includes/string.h"
 
 void enable_bliking_text()
 {
@@ -79,13 +54,13 @@ void sleep(uint32_t time) {
 }
 
 void put(unsigned char c,uint8_t forecolor,uint8_t backcolor,uint16_t x,uint16_t y) {
-    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    struct Kernel *kernel = (struct Kernel *)0x7d00;
     uint16_t *video_memory = (uint16_t *)0xb8000;
     video_memory[x + y * kernel->ScreenWidth] = (backcolor << 12) | (forecolor << 8) | c;
 }
 
 void putc(unsigned char c) {
-    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    struct Kernel *kernel = (struct Kernel *)0x7d00;
     // check if c is a control character
     if (c == '\n') {
         kernel->ScreenPosX = 0;
@@ -133,11 +108,16 @@ void putc(unsigned char c) {
 }
 
 void clear(uint8_t color) {
-    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    struct Kernel *kernel = (struct Kernel *)0x7d00;
+    uint16_t *video_memory = (uint16_t *)0xb8000;
     uint8_t back_color = kernel->BackgroundColor;
     kernel->BackgroundColor = color;
+
+    uint8_t attr = ((color & 0x0F) << 4) | (kernel->ForegroundColor & 0x0F);
+    uint16_t fill = ((uint16_t)attr << 8) | ' ';
+
     for (uint16_t i = 0; i < 80 * 25; i++) {
-        kernel->putc(' ');
+        video_memory[i] = fill;
     }
     kernel->BackgroundColor = back_color;
     kernel->ScreenPosX = 0;
@@ -146,14 +126,14 @@ void clear(uint8_t color) {
 
 
 void puts(unsigned char str[]) {
-    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    struct Kernel *kernel = (struct Kernel *)0x7d00;
     for (uint16_t i = 0; str[i] != '\0'; i++) {
         kernel->putc(str[i]);
     }
 }
 
 void puti(int32_t num) {
-    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    struct Kernel *kernel = (struct Kernel *)0x7d00;
     if (num < 0) {
         kernel->putc('-');
         num = -num;
@@ -175,8 +155,8 @@ void puti(int32_t num) {
 }
 
 void k_init() {
-    // store static kernel struct in memory at 0x00000000
-    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    // store static kernel struct in memory at 0x7c00
+    struct Kernel *kernel = (struct Kernel *)0x7d00;
 
     // initialize kernel variables
     kernel->ScreenWidth = 80;
@@ -199,11 +179,11 @@ void k_init() {
     keyboard_init();
 
     // initialize kernel functions
-    kernel->putc = putc+0xA000;
-    kernel->clear = clear+0xA000;
-    kernel->sleep = sleep+0xA000;
-    kernel->puts = puts+0xA000;
-    kernel->puti = puti+0xA000;
+    kernel->putc = putc;
+    kernel->clear = clear;
+    kernel->sleep = sleep;
+    kernel->puts = puts;
+    kernel->puti = puti;
 }
 
 unsigned int restart_keyboard()
@@ -251,7 +231,7 @@ void k_entrypoint() {
             {0xFF, 0xFF, 0xFF, 0xFF, 0x66, 0xFF, 0xFF, 0x66, 0xFF, 0xFF, 0xFF, 0xFF,},
             {0xFF, 0xFF, 0xFF, 0x66, 0x66, 0xFF, 0x66, 0x66, 0xFF, 0xFF, 0xFF, 0xFF}
     };
-    struct Kernel *kernel = (struct Kernel *)0x00000000;
+    struct Kernel *kernel = (struct Kernel *)0x7d00;
     kernel->clear(Black);
 
     unsigned char start[] = "Press any key to start kernel execution...";
@@ -461,6 +441,5 @@ void k_entrypoint() {
         // halt the CPU to save power
         sleep(10000);
     }
+    kernel->puts(message);
 }
-
-
