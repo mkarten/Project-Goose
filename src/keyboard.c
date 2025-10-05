@@ -85,6 +85,7 @@ void keyboard_init() {
 }
 
 void keyboard_handler() {
+
     unsigned char scancode = inportb(0x60);
     last_scancode = scancode;
     

@@ -85,7 +85,16 @@ static void idt_set_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t 
     idt_entries[num].flags = flags;
 }
 
+static void default_handler() {
+    // For now, just return
+    __asm__ __volatile__("iret");
+}
+
 void idt_init() {
+
+    // Disable interrupts while setting up
+    __asm__ __volatile__("cli");
+
     // Allocate memory for IDT
     idt_entries = kmalloc(sizeof(IDTEntry) * 256);
     idt_ptr = kmalloc(sizeof(IDTPtr));
@@ -93,9 +102,9 @@ void idt_init() {
     idt_ptr->limit = (sizeof(IDTEntry) * 256) - 1;
     idt_ptr->base = (uint32_t)idt_entries;
 
-    // Clear IDT
+    // Clear IDT and set default handler
     for (int i = 0; i < 256; i++) {
-        idt_set_gate(i, 0, 0x08, 0);
+        idt_set_gate(i, (uint32_t)default_handler, 0x08, 0x8E);
     }
 
     // Set up keyboard interrupt (IRQ1 -> INT 0x21)
@@ -104,11 +113,14 @@ void idt_init() {
     // Initialize PIC
     pic_init();
 
-    // Load IDT
-    idt_load((uint32_t)idt_ptr);
 
     // Enable keyboard interrupt
+    outportb(PIC1_DATA, 0xFF);             // Disable all IRQs on master PIC
     outportb(PIC1_DATA, inportb(PIC1_DATA) & ~(1 << 1));
+    outportb(PIC2_DATA, 0xFF);             // Disable all IRQs on slave PIC
+
+    // Load IDT
+    idt_load((uint32_t)idt_ptr);
 
     // Enable interrupts
     __asm__ __volatile__("sti");
